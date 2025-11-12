@@ -4,10 +4,8 @@ import pandas as pd
 import math
 from datetime import datetime
 from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
+from fpdf import FPDF
+from datetime import datetime
 import base64
 
 st.set_page_config(page_title="Neonatal ECG Assistant", layout="centered")
@@ -322,55 +320,55 @@ st.markdown(f"**Axis:** {axis_result}" + (f" — {axis_note}" if axis_note else 
 # PDF generation (clean, neutral)
 # ------------------------------
 def build_pdf(dataframe: pd.DataFrame, axis_text: str, axis_note: str, comments: str) -> bytes:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
-    styles = getSampleStyleSheet()
-    story = []
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
 
-    story.append(Paragraph("Neonatal ECG Assistant", styles["Title"]))
-    story.append(Paragraph(datetime.now().strftime("%Y-%m-%d %H:%M"), styles["Normal"]))
-    story.append(Spacer(1, 12))
+    # Title & time
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Neonatal ECG Assistant", ln=1)
+    pdf.set_font("Arial", "", 11)
+    pdf.cell(0, 8, datetime.now().strftime("%Y-%m-%d %H:%M"), ln=1)
+    pdf.ln(2)
 
-    # table
-    data = [["Measure", "Input", "Converted", "Reference", "Status"]]
+    # Table header
+    headers = ["Measure", "Input", "Converted", "Reference", "Status"]
+    col_w = [48, 40, 40, 35, 27]  # total ~190 incl. margins
+    pdf.set_font("Arial", "B", 11)
+    for w, h in zip(col_w, headers):
+        pdf.cell(w, 8, h, border=1)
+    pdf.ln(8)
+
+    # Table rows
+    pdf.set_font("Arial", "", 10)
     for _, r in dataframe.iterrows():
-        data.append([str(r["Measure"]), str(r["Input"]), str(r["Converted"]), str(r["Reference"]), str(r["Status"])])
+        row = [
+            str(r["Measure"]),
+            str(r["Input"]),
+            str(r["Converted"]),
+            str(r["Reference"]),
+            str(r["Status"]),
+        ]
+        # simple wrap: truncate to fit cell
+        for w, val in zip(col_w, row):
+            pdf.cell(w, 8, (val if len(val) <= 28 else val[:27] + "…"), border=1)
+        pdf.ln(8)
 
-    tbl = Table(data, hAlign="LEFT", colWidths=[120, 110, 110, 100, 80])
-    tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.whitesmoke),
-        ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        ("ALIGN", (2,1), (4,-1), "LEFT"),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.Color(1,1,1), colors.Color(0.99,0.99,0.99)]),
-    ]))
-    story.append(tbl)
-    story.append(Spacer(1, 12))
-
+    pdf.ln(4)
     axis_line = axis_text + (f" — {axis_note}" if axis_note else "")
-    story.append(Paragraph(f"<b>Axis:</b> {axis_line}", styles["Normal"]))
+    pdf.multi_cell(0, 8, f"Axis: {axis_line}")
 
     if comments:
-        story.append(Spacer(1, 8))
-        story.append(Paragraph(f"<b>Comments:</b> {comments}", styles["Normal"]))
+        pdf.ln(2)
+        pdf.multi_cell(0, 8, f"Comments: {comments}")
 
-    story.append(Spacer(1, 16))
-    story.append(Paragraph(
-        "Disclaimer: This tool provides educational decision-support only. ECG findings must be reviewed by a qualified clinician.",
-        styles["Italic"]
-    ))
+    pdf.ln(3)
+    pdf.set_font("Arial", "I", 10)
+    pdf.multi_cell(0, 8, "Disclaimer: This tool provides educational decision-support only. "
+                         "ECG findings must be reviewed by a qualified clinician.")
 
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.read()
-
-st.divider()
-pdf_bytes = build_pdf(results_df, axis_result, axis_note, comments)  # build upfront so button instantly downloads
-st.download_button(
-    "📄 Download PDF report",
-    data=pdf_bytes,
-    file_name="Neonatal_ECG_Report.pdf",
-    mime="application/pdf",
+    # Return as bytes
+    return pdf.output(dest="S").encode("latin-1")
 )
 
 # ------------------------------
