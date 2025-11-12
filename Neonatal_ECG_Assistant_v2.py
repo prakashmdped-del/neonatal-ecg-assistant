@@ -369,7 +369,7 @@ def build_pdf(dataframe: pd.DataFrame, axis_text: str, axis_note: str, comments:
 
     # Return as bytes
     return pdf.output(dest="S").encode("latin-1")
-)
+
 
 # ------------------------------
 # Reference viewer (expanders)
